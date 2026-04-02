@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Attendance Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial;
+            background-color: #f4f6f8;
+            margin: 0;
+        }
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 15px;
+            text-align: center;
+            font-size: 24px;
+        }
+        .container {
+            padding: 20px;
+            text-align: center;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+        table, th, td {
+            border: 1px solid black;
+            padding: 10px;
+        }
+        th {
+            background: #3498db;
+            color: white;
+        }
+        .btn {
+            padding: 10px 20px;
+            background: #27ae60;
+            color: white;
+            text-decoration: none;
+            margin: 5px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    AI Face Recognition Attendance System
+</div>
+
+<div class="container">
+    <form method="POST">
+        <label>Select Date:</label>
+        <input type="date" name="date">
+        <button class="btn" type="submit">Filter</button>
+    </form>
+
+    <a class="btn" href="/download">Download Report</a>
+    <a class="btn" href="/logout">Logout</a>
+
+    <br><br>
+
+    {% for table in tables %}
+        {{ table|safe }}
+    {% endfor %}
+</div>
+
+</body>
+</html>
