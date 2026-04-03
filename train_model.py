@@ -1,39 +1,27 @@
 import cv2
+import os
 import numpy as np
 from PIL import Image
-import os
 
 dataset_path = 'dataset'
-
 recognizer = cv2.face.LBPHFaceRecognizer_create()
-detector = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
-def getImagesAndLabels(path):
-    imagePaths = [os.path.join(path, f) for f in os.listdir(path)]
-    faceSamples = []
-    ids = []
+faces = []
+ids = []
 
-    for imagePath in imagePaths:
-        PIL_img = Image.open(imagePath).convert('L')
-        img_numpy = np.array(PIL_img, 'uint8')
+for user_id in os.listdir(dataset_path):
+    user_folder = os.path.join(dataset_path, user_id)
 
-        id = int(os.path.split(imagePath)[-1].split(".")[1])
-        faces = detector.detectMultiScale(img_numpy)
+    for image_name in os.listdir(user_folder):
+        img_path = os.path.join(user_folder, image_name)
+        img = Image.open(img_path).convert('L')
+        img_numpy = np.array(img, 'uint8')
 
-        for (x, y, w, h) in faces:
-            faceSamples.append(img_numpy[y:y+h, x:x+w])
-            ids.append(id)
-
-    return faceSamples, ids
-
-print("Training faces... Please wait")
-
-faces, ids = getImagesAndLabels(dataset_path)
-
-if not os.path.exists("trainer"):
-    os.makedirs("trainer")
+        faces.append(img_numpy)
+        ids.append(int(user_id))
 
 recognizer.train(faces, np.array(ids))
+os.makedirs("trainer", exist_ok=True)
 recognizer.save('trainer/trainer.yml')
 
 print("Model trained successfully")

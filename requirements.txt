@@ -1,6 +1,6 @@
 flask
 opencv-contrib-python
 numpy
-pandas
 pillow
+sqlite3
 gunicorn

@@ -1,50 +1,125 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, session, send_file
 import sqlite3
+import subprocess
 import pandas as pd
+from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = "attendance_secret"
+app.secret_key = "face_attendance_secret_key"
 
-USERNAME = "admin"
-PASSWORD = "admin123"
 
-@app.route('/', methods=['GET', 'POST'])
+# Home Page
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+
+# Mark Attendance (Runs recognize.py)
+@app.route('/mark_attendance')
+def mark_attendance():
+    subprocess.call(["python", "recognize.py"])
+    return redirect('/')
+
+
+# Admin Login
+@app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        if request.form['username'] == USERNAME and request.form['password'] == PASSWORD:
-            session['logged_in'] = True
-            return redirect(url_for('dashboard'))
+        username = request.form['username']
+        password = request.form['password']
+
+        # Change username and password here
+        if username == "admin" and password == "admin123":
+            session['admin'] = True
+            return redirect('/dashboard')
+        else:
+            return "Invalid Username or Password"
+
     return render_template('login.html')
 
-@app.route('/dashboard', methods=['GET', 'POST'])
-def dashboard():
-    if not session.get('logged_in'):
-        return redirect(url_for('login'))
 
-    conn = sqlite3.connect("attendance.db")
+# Admin Dashboard
+@app.route('/dashboard')
+def dashboard():
+    if 'admin' not in session:
+        return redirect('/login')
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM users")
+    users = cursor.fetchall()
+
+    cursor.execute("SELECT * FROM attendance")
+    attendance = cursor.fetchall()
+
+    cursor.execute("SELECT COUNT(*) FROM users")
+    total_users = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM attendance")
+    total_attendance = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM attendance WHERE date = date('now')")
+    today_attendance = cursor.fetchone()[0]
+
+    conn.close()
+
+    return render_template("dashboard.html",
+                           users=users,
+                           attendance=attendance,
+                           total_users=total_users,
+                           total_attendance=total_attendance,
+                           today_attendance=today_attendance)
+
+
+# Register User Page
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if 'admin' not in session:
+        return redirect('/login')
 
     if request.method == 'POST':
-        date = request.form['date']
-        query = "SELECT * FROM attendance WHERE date=?"
-        df = pd.read_sql_query(query, conn, params=(date,))
-    else:
-        df = pd.read_sql_query("SELECT * FROM attendance", conn)
+        user_id = request.form['user_id']
+        name = request.form['name']
 
-    conn.close()
-    return render_template('index.html', tables=[df.to_html(classes='data')], titles=df.columns.values)
+        conn = sqlite3.connect("database.db")
+        cursor = conn.cursor()
+        cursor.execute("INSERT OR REPLACE INTO users VALUES (?, ?)", (user_id, name))
+        conn.commit()
+        conn.close()
 
-@app.route('/logout')
-def logout():
-    session.pop('logged_in', None)
-    return redirect(url_for('login'))
+        # Capture face after registering
+        subprocess.call(["python", "capture_faces.py"])
+        subprocess.call(["python", "train_model.py"])
 
-@app.route('/download')
-def download():
-    conn = sqlite3.connect("attendance.db")
+        return redirect('/dashboard')
+
+    return render_template('register.html')
+
+
+# Download Attendance Report
+@app.route('/download_report')
+def download_report():
+    if 'admin' not in session:
+        return redirect('/login')
+
+    conn = sqlite3.connect("database.db")
     df = pd.read_sql_query("SELECT * FROM attendance", conn)
     conn.close()
-    df.to_csv("reports/attendance.csv", index=False)
-    return "Report Downloaded! Check reports folder."
 
+    file_name = "attendance_report.csv"
+    df.to_csv(file_name, index=False)
+
+    return send_file(file_name, as_attachment=True)
+
+
+# Logout
+@app.route('/logout')
+def logout():
+    session.pop('admin', None)
+    return redirect('/')
+
+
+# Run App
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(debug=True)
