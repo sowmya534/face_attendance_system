@@ -1,37 +1,24 @@
 body {
     font-family: Arial;
+    background: #f4f6f9;
     text-align: center;
-    background: #f2f2f2;
 }
 
-.login-box {
-    width: 300px;
+.card {
     background: white;
-    padding: 30px;
-    margin: auto;
-    margin-top: 100px;
-    box-shadow: 0px 0px 10px gray;
-}
-
-input {
-    padding: 10px;
+    padding: 20px;
     margin: 10px;
-    width: 80%;
-}
-
-button {
-    padding: 10px 20px;
-    background: green;
-    color: white;
-    border: none;
+    display: inline-block;
+    border-radius: 10px;
+    box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
 }
 
 table {
     margin: auto;
-    width: 80%;
-    background: white;
+    border-collapse: collapse;
 }
 
-.error {
-    color: red;
+td, th {
+    padding: 10px;
+    border: 1px solid #ccc;
 }

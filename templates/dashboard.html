@@ -1,89 +1,50 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Admin Dashboard</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
-<body style="background-color:#f4f6f9;">
 
-<nav class="navbar navbar-dark bg-dark">
-    <div class="container-fluid">
-        <span class="navbar-brand">Admin Dashboard</span>
-        <a href="/logout" class="btn btn-danger">Logout</a>
-    </div>
-</nav>
+<body>
 
-<div class="container mt-4">
+<h1>Admin Dashboard</h1>
 
-    <!-- Top Cards -->
-    <div class="row text-center">
-        <div class="col-md-4">
-            <div class="card bg-primary text-white p-3 shadow">
-                <h4>Total Users</h4>
-                <h2>{{ total_users }}</h2>
-            </div>
-        </div>
-
-        <div class="col-md-4">
-            <div class="card bg-success text-white p-3 shadow">
-                <h4>Total Attendance</h4>
-                <h2>{{ total_attendance }}</h2>
-            </div>
-        </div>
-
-        <div class="col-md-4">
-            <div class="card bg-warning text-white p-3 shadow">
-                <h4>Today Attendance</h4>
-                <h2>{{ today_attendance }}</h2>
-            </div>
-        </div>
-    </div>
-
-    <!-- Register Button -->
-    <div class="mt-4">
-        <a href="/register" class="btn btn-primary">Register New User</a>
-        <a href="/download_report" class="btn btn-success">Download Report</a>
-    </div>
-
-    <!-- Users Table -->
-    <div class="mt-4">
-        <h3>Users</h3>
-        <table class="table table-bordered table-striped">
-            <tr>
-                <th>ID</th>
-                <th>Name</th>
-            </tr>
-            {% for user in users %}
-            <tr>
-                <td>{{ user[0] }}</td>
-                <td>{{ user[1] }}</td>
-            </tr>
-            {% endfor %}
-        </table>
-    </div>
-
-    <!-- Attendance Table -->
-    <div class="mt-4">
-        <h3>Attendance Records</h3>
-        <table class="table table-bordered table-striped">
-            <tr>
-                <th>ID</th>
-                <th>Name</th>
-                <th>Date</th>
-                <th>Time</th>
-            </tr>
-            {% for row in attendance %}
-            <tr>
-                <td>{{ row[0] }}</td>
-                <td>{{ row[1] }}</td>
-                <td>{{ row[2] }}</td>
-                <td>{{ row[3] }}</td>
-            </tr>
-            {% endfor %}
-        </table>
-    </div>
-
+<div class="cards">
+    <div class="card">Total Users: {{total_users}}</div>
+    <div class="card">Total Attendance: {{total_attendance}}</div>
 </div>
+
+<canvas id="chart" width="400"></canvas>
+
+<script>
+const ctx = document.getElementById('chart');
+new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: ["Users", "Attendance"],
+        datasets: [{
+            label: 'Stats',
+            data: [{{total_users}}, {{total_attendance}}]
+        }]
+    }
+});
+</script>
+
+<h2>Attendance</h2>
+<table>
+<tr><th>Name</th><th>Date</th><th>Time</th></tr>
+{% for a in attendance %}
+<tr>
+<td>{{a.name}}</td>
+<td>{{a.date}}</td>
+<td>{{a.time}}</td>
+</tr>
+{% endfor %}
+</table>
+
+<a href="/send_email">Send Email Report</a>
+<a href="/logout">Logout</a>
 
 </body>
 </html>

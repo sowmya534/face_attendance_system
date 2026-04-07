@@ -1,125 +1,190 @@
-from flask import Flask, render_template, request, redirect, session, send_file
-import sqlite3
-import subprocess
-import pandas as pd
+from flask import Flask, render_template, request, jsonify, redirect, session
+import sqlite3, numpy as np, smtplib
 from datetime import datetime
+from email.mime.text import MIMEText
 
 app = Flask(__name__)
-app.secret_key = "face_attendance_secret_key"
+app.secret_key = "secret123"
 
+# ---------------- DATABASE ----------------
+def get_db():
+    conn = sqlite3.connect("attendance.db")
+    conn.row_factory = sqlite3.Row
+    return conn
 
-# Home Page
-@app.route('/')
-def index():
-    return render_template('index.html')
+def init_db():
+    conn = get_db()
 
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        face_encoding BLOB,
+        image TEXT
+    )
+    """)
 
-# Mark Attendance (Runs recognize.py)
-@app.route('/mark_attendance')
-def mark_attendance():
-    subprocess.call(["python", "recognize.py"])
-    return redirect('/')
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS attendance (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        date TEXT,
+        time TEXT
+    )
+    """)
 
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS admins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT,
+        password TEXT
+    )
+    """)
 
-# Admin Login
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+    # default admin
+    conn.execute("INSERT OR IGNORE INTO admins VALUES (1,'admin','admin')")
 
-        # Change username and password here
-        if username == "admin" and password == "admin123":
-            session['admin'] = True
-            return redirect('/dashboard')
-        else:
-            return "Invalid Username or Password"
-
-    return render_template('login.html')
-
-
-# Admin Dashboard
-@app.route('/dashboard')
-def dashboard():
-    if 'admin' not in session:
-        return redirect('/login')
-
-    conn = sqlite3.connect("database.db")
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT * FROM users")
-    users = cursor.fetchall()
-
-    cursor.execute("SELECT * FROM attendance")
-    attendance = cursor.fetchall()
-
-    cursor.execute("SELECT COUNT(*) FROM users")
-    total_users = cursor.fetchone()[0]
-
-    cursor.execute("SELECT COUNT(*) FROM attendance")
-    total_attendance = cursor.fetchone()[0]
-
-    cursor.execute("SELECT COUNT(*) FROM attendance WHERE date = date('now')")
-    today_attendance = cursor.fetchone()[0]
-
+    conn.commit()
     conn.close()
 
-    return render_template("dashboard.html",
-                           users=users,
-                           attendance=attendance,
-                           total_users=total_users,
-                           total_attendance=total_attendance,
-                           today_attendance=today_attendance)
+init_db()
 
+# ---------------- ROUTES ----------------
 
-# Register User Page
-@app.route('/register', methods=['GET', 'POST'])
+@app.route("/")
+def home():
+    return render_template("index.html")
+
+@app.route("/camera")
+def camera():
+    return render_template("camera.html")
+
+@app.route("/register")
 def register():
-    if 'admin' not in session:
-        return redirect('/login')
+    return render_template("register.html")
 
-    if request.method == 'POST':
-        user_id = request.form['user_id']
-        name = request.form['name']
+# ---------- REGISTER FACE ----------
+@app.route("/register_face", methods=["POST"])
+def register_face():
+    data = request.json
+    name = data["name"]
+    descriptor = np.array(data["descriptor"], dtype=np.float32).tobytes()
 
-        conn = sqlite3.connect("database.db")
-        cursor = conn.cursor()
-        cursor.execute("INSERT OR REPLACE INTO users VALUES (?, ?)", (user_id, name))
-        conn.commit()
-        conn.close()
-
-        # Capture face after registering
-        subprocess.call(["python", "capture_faces.py"])
-        subprocess.call(["python", "train_model.py"])
-
-        return redirect('/dashboard')
-
-    return render_template('register.html')
-
-
-# Download Attendance Report
-@app.route('/download_report')
-def download_report():
-    if 'admin' not in session:
-        return redirect('/login')
-
-    conn = sqlite3.connect("database.db")
-    df = pd.read_sql_query("SELECT * FROM attendance", conn)
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO users (name, face_encoding, image) VALUES (?, ?, ?)",
+        (name, descriptor, "")
+    )
+    conn.commit()
     conn.close()
 
-    file_name = "attendance_report.csv"
-    df.to_csv(file_name, index=False)
+    return jsonify({"status": "registered"})
 
-    return send_file(file_name, as_attachment=True)
+# ---------- MARK ATTENDANCE ----------
+@app.route("/mark_attendance", methods=["POST"])
+def mark_attendance():
+    descriptor = np.array(request.json["descriptor"])
 
+    conn = get_db()
+    users = conn.execute("SELECT * FROM users").fetchall()
 
-# Logout
-@app.route('/logout')
+    best_match = None
+    min_distance = 999
+
+    for user in users:
+        stored = np.frombuffer(user["face_encoding"], dtype=np.float32)
+        dist = np.linalg.norm(stored - descriptor)
+
+        if dist < min_distance:
+            min_distance = dist
+            best_match = user["name"]
+
+    if min_distance < 0.6:
+        now = datetime.now()
+        date = now.strftime("%Y-%m-%d")
+        time = now.strftime("%H:%M:%S")
+
+        existing = conn.execute(
+            "SELECT * FROM attendance WHERE name=? AND date=?",
+            (best_match, date)
+        ).fetchone()
+
+        if not existing:
+            conn.execute(
+                "INSERT INTO attendance (name, date, time) VALUES (?, ?, ?)",
+                (best_match, date, time)
+            )
+            conn.commit()
+
+        conn.close()
+        return jsonify({"message": f"Attendance marked for {best_match}"})
+
+    conn.close()
+    return jsonify({"message": "Face not recognized"})
+
+# ---------- ADMIN LOGIN ----------
+@app.route("/login", methods=["GET","POST"])
+def login():
+    if request.method == "POST":
+        conn = get_db()
+        admin = conn.execute(
+            "SELECT * FROM admins WHERE username=? AND password=?",
+            (request.form["username"], request.form["password"])
+        ).fetchone()
+
+        if admin:
+            session["admin"] = True
+            return redirect("/dashboard")
+
+    return render_template("login.html")
+
+# ---------- DASHBOARD ----------
+@app.route("/dashboard")
+def dashboard():
+    if not session.get("admin"):
+        return redirect("/login")
+
+    conn = get_db()
+
+    users = conn.execute("SELECT * FROM users").fetchall()
+    attendance = conn.execute("SELECT * FROM attendance").fetchall()
+
+    total_users = len(users)
+    total_attendance = len(attendance)
+
+    conn.close()
+
+    return render_template(
+        "dashboard.html",
+        users=users,
+        attendance=attendance,
+        total_users=total_users,
+        total_attendance=total_attendance
+    )
+
+# ---------- EMAIL REPORT ----------
+@app.route("/send_email")
+def send_email():
+    sender = "your_email@gmail.com"
+    password = "your_app_password"
+    receiver = "receiver_email@gmail.com"
+
+    msg = MIMEText("Attendance Report Generated")
+    msg["Subject"] = "Attendance Report"
+    msg["From"] = sender
+    msg["To"] = receiver
+
+    server = smtplib.SMTP_SSL("smtp.gmail.com", 465)
+    server.login(sender, password)
+    server.sendmail(sender, receiver, msg.as_string())
+    server.quit()
+
+    return "Email Sent"
+
+@app.route("/logout")
 def logout():
-    session.pop('admin', None)
-    return redirect('/')
+    session.clear()
+    return redirect("/")
 
-
-# Run App
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(debug=True)

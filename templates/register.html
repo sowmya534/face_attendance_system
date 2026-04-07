@@ -2,34 +2,147 @@
 <html>
 <head>
     <title>Register User</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Face API -->
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+
+    <style>
+        body {
+            font-family: Arial;
+            text-align: center;
+            background: #f4f6f9;
+        }
+
+        .container {
+            margin-top: 50px;
+        }
+
+        input, button {
+            padding: 10px;
+            margin: 10px;
+            width: 250px;
+        }
+
+        video {
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            display: inline-block;
+            box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
+        }
+
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
 </head>
-<body style="background-color:#f4f6f9;">
+
+<body>
 
 <div class="container">
-    <div class="row justify-content-center" style="margin-top:100px;">
-        <div class="col-md-4">
-            <div class="card shadow-lg p-4">
-                <h3 class="text-center">Register User</h3>
-                <form method="POST">
-                    <div class="mb-3">
-                        <label>User ID</label>
-                        <input type="number" name="user_id" class="form-control" required>
-                    </div>
+    <div class="card">
 
-                    <div class="mb-3">
-                        <label>Name</label>
-                        <input type="text" name="name" class="form-control" required>
-                    </div>
+        <h2>Register New User</h2>
 
-                    <div class="d-grid">
-                        <button type="submit" class="btn btn-primary">Register & Capture Face</button>
-                    </div>
-                </form>
-            </div>
-        </div>
+        <input type="text" id="name" placeholder="Enter Name" required>
+        <br>
+
+        <!-- Optional Image Upload -->
+        <input type="file" id="image">
+        <br>
+
+        <video id="video" width="300" height="220" autoplay muted></video>
+        <br>
+
+        <button onclick="registerFace()">Capture & Register</button>
+
+        <h3 id="status">Loading camera...</h3>
+
     </div>
 </div>
+
+<script>
+const video = document.getElementById("video");
+const statusText = document.getElementById("status");
+
+// Start Camera
+navigator.mediaDevices.getUserMedia({ video: true })
+.then(stream => {
+    video.srcObject = stream;
+    statusText.innerText = "Camera Ready";
+})
+.catch(err => {
+    statusText.innerText = "Camera access denied";
+});
+
+// Load AI Models
+async function loadModels() {
+    statusText.innerText = "Loading AI models...";
+    await faceapi.nets.tinyFaceDetector.loadFromUri('/static/models');
+    await faceapi.nets.faceLandmark68Net.loadFromUri('/static/models');
+    await faceapi.nets.faceRecognitionNet.loadFromUri('/static/models');
+    statusText.innerText = "Models Loaded";
+}
+
+loadModels();
+
+// Register Face Function
+async function registerFace() {
+
+    const name = document.getElementById("name").value;
+
+    if (!name) {
+        alert("Please enter name");
+        return;
+    }
+
+    statusText.innerText = "Detecting face...";
+
+    const detection = await faceapi
+        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+
+    if (!detection) {
+        alert("No face detected. Please try again.");
+        return;
+    }
+
+    statusText.innerText = "Registering...";
+
+    fetch("/register_face", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            name: name,
+            descriptor: Array.from(detection.descriptor)
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        statusText.innerText = "User Registered Successfully!";
+        alert("User Registered Successfully!");
+    })
+    .catch(err => {
+        statusText.innerText = "Error occurred";
+        console.error(err);
+    });
+}
+</script>
 
 </body>
 </html>

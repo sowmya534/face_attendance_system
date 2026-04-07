@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Attendance</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+</head>
+
+<body style="text-align:center">
+
+<h2>Mark Attendance</h2>
+
+<video id="video" width="300" autoplay></video>
+<h3 id="status">Detecting...</h3>
+
+<script>
+const video = document.getElementById("video");
+const statusText = document.getElementById("status");
+
+navigator.mediaDevices.getUserMedia({ video: true })
+.then(stream => video.srcObject = stream);
+
+async function loadModels() {
+    await faceapi.nets.tinyFaceDetector.loadFromUri('/static/models');
+    await faceapi.nets.faceLandmark68Net.loadFromUri('/static/models');
+    await faceapi.nets.faceRecognitionNet.loadFromUri('/static/models');
+}
+
+loadModels();
+
+video.addEventListener("play", () => {
+    setInterval(async () => {
+        const detection = await faceapi
+            .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+            .withFaceLandmarks()
+            .withFaceDescriptor();
+
+        if (detection) {
+            fetch("/mark_attendance", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                    descriptor: Array.from(detection.descriptor)
+                })
+            })
+            .then(res => res.json())
+            .then(data => statusText.innerText = data.message);
+        }
+    }, 3000);
+});
+</script>
+
+</body>
+</html>
